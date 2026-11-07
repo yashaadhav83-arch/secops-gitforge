@@ -33,6 +33,8 @@ spec:
       app: secops-app
   template:
     metadata:
+      annotations:
+        checkov.io/skip1: CKV_K8S_43=Using image tag for local Kind/Jenkins lab pipeline
       labels:
         app: secops-app
     spec:
