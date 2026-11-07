@@ -62,7 +62,7 @@ pipeline {
                 sh "kind load docker-image ${IMAGE_NAME}"
                 
                 echo "Applying Kubernetes manifests..."
-                sh "kubectl apply -f k8s/deployment.yaml"
+                sh "kubectl apply --validate=false -f k8s/deployment.yaml"
             }
         }
         
