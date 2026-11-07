@@ -71,7 +71,7 @@ pipeline {
             steps {
                 echo "Running OWASP ZAP dynamic baseline scan..."
                 sh '''
-		    docker run --rm -t zaproxy/zap-stable zap-baseline.py -t http://host.docker.internal:5000 || true
+		    docker run --rm -t --network host zaproxy/zap-stable zap-baseline.py -t http://host.docker.internal:5000 || true
 		'''
             }
         }
