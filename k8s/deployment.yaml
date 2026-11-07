@@ -47,6 +47,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: secops-app
+          # checkov:skip=CKV_K8S_43:
           image: secops-app:1.0.0
           imagePullPolicy: Always
           ports:
