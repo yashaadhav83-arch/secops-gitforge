@@ -38,7 +38,11 @@ pipeline {
         stage('4. IaC Security Check') {
             steps {
                 echo "Scanning Kubernetes and Terraform configurations with Checkov..."
-                sh 'checkov -d k8s/ -d terraform/'
+                sh '''
+		    python3 -m venv checkov-venv
+		    ./checkov-venv/bin/pip install checkov
+		    ./checkov-venv/bin/checkov -d k8s/ -d terraform/
+		'''
             }
         }
         
