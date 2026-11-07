@@ -58,11 +58,12 @@ pipeline {
         
         stage('6. Deploy to Kind Cluster') {
             steps {
-                echo "Loading image into local Kind cluster..."
-                sh "kind load docker-image ${IMAGE_NAME}"
-                
                 echo "Applying Kubernetes manifests..."
-                sh "kubectl apply --validate=false -f k8s/deployment.yaml"
+		sh '''
+		    kind export kubeconfig --name kind
+		    kubectl cluster-info
+		    kubectl apply --validate=false -f k8s/deployment.yaml
+		'''
             }
         }
         
