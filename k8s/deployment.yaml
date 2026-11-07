@@ -15,6 +15,8 @@ kind: Deployment
 metadata:
   name: secops-app
   namespace: secops
+  annotations:
+    checkov.io/skip1: CKV_K8S_43=Allow image tag for local Kind/Jenkins lab pipeline
   labels:
     app: secops-app
     app.kubernetes.io/name: secops-app
