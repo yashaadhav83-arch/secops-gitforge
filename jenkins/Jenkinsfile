@@ -20,7 +20,7 @@ pipeline {
 		    python3 -m venv venv
 		    . venv/bin/activate
 		    pip install semgrep
-		    semgrep --config=auto --error src/
+		    ./venv/bin/semgrep --config=auto --error src/
 		'''
             }
         }
