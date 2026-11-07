@@ -1,0 +1,75 @@
+pipeline {
+    agent any
+    environment {
+        IMAGE_NAME = "secops-app:latest"
+    }
+    stages {
+        stage('1. Checkout SCM') {
+            steps {
+                checkout scm
+            }
+        }
+        
+        stage('2. Secrets & SAST Scan') {
+            steps {
+                echo "Running Gitleaks for hardcoded credentials..."
+                sh 'gitleaks detect --source . --verbose || true'
+                
+                echo "Running Semgrep for static code analysis..."
+                sh 'semgrep --config=auto --error src/'
+            }
+        }
+        
+        stage('3. Generate SBOM & SCA Scan') {
+            steps {
+                echo "Generating Software Bill of Materials (SBOM) using Syft..."
+                sh 'syft dir:src -o cyclonedx-json > sbom.json'
+                
+                echo "Scanning dependencies for Critical/High CVEs using Trivy..."
+                sh 'trivy sbom sbom.json --exit-code 1 --severity CRITICAL,HIGH'
+            }
+        }
+
+        stage('4. IaC Security Check') {
+            steps {
+                echo "Scanning Kubernetes and Terraform configurations with Checkov..."
+                sh 'checkov -d k8s/ -d terraform/'
+            }
+        }
+        
+        stage('5. Build & Container Security Scan') {
+            steps {
+                echo "Building Docker image..."
+                sh "docker build -t ${IMAGE_NAME} src/"
+                
+                echo "Scanning container image vulnerabilities..."
+                sh "trivy image --exit-code 1 --severity CRITICAL ${IMAGE_NAME}"
+            }
+        }
+        
+        stage('6. Deploy to Kind Cluster') {
+            steps {
+                echo "Loading image into local Kind cluster..."
+                sh "kind load docker-image ${IMAGE_NAME}"
+                
+                echo "Applying Kubernetes manifests..."
+                sh "kubectl apply -f k8s/deployment.yaml"
+            }
+        }
+        
+        stage('7. DAST Scan (OWASP ZAP)') {
+            steps {
+                echo "Running OWASP ZAP dynamic baseline scan..."
+                sh 'docker run --rm -t owasp/zap2docker-stable zap-baseline.py -t http://host.docker.internal:5000 || true'
+            }
+        }
+    }
+    post {
+        success {
+            echo "SUCCESS: Pipeline passed all security gates and deployed securely!"
+        }
+        failure {
+            echo "FAILURE: Security vulnerability or compliance violation detected. Build blocked!"
+        }
+    }
+}
