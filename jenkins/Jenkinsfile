@@ -16,7 +16,12 @@ pipeline {
                 sh 'gitleaks detect --source . --verbose || true'
                 
                 echo "Running Semgrep for static code analysis..."
-                sh 'semgrep --config=auto --error src/'
+                sh '''
+		    python3 -m venv venv
+		    . venv/bin/activate
+		    pip install semgrep
+		    semgrep --config=auto --error src/
+		'''
             }
         }
         
