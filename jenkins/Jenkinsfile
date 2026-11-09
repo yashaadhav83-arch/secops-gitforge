@@ -62,6 +62,8 @@ pipeline {
 		sh '''
 		    kind export kubeconfig --name kind
 		    kubectl apply --validate=false -f k8s/deployment.yaml
+		    echo "Waiting for secops-app pdo to be ready..."
+		    kubectl rollout status deployment/secops-app -n secops --timeout=60s
 		    pkill -f "kubectl port-forward" || true
 		    kubectl port-forward -n secops svc/secops-app-service 5000:5000 &
 		    sleep 3
