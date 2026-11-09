@@ -1,37 +1,42 @@
 pipeline {
     agent any
+
     environment {
-        IMAGE_NAME = "secops-app:latest"
+        IMAGE_NAME = "secops-app"
+        IMAGE_TAG = "1.0.0"
+        NAMESPACE = "secops"
     }
+
     stages {
         stage('1. Checkout SCM') {
             steps {
                 checkout scm
             }
         }
-        
+
         stage('2. Secrets & SAST Scan') {
             steps {
                 echo "Running Gitleaks for hardcoded credentials..."
-                sh 'gitleaks detect --source . --verbose || true'
-                
+                sh 'gitleaks detect --source . --verbose'
+
                 echo "Running Semgrep for static code analysis..."
                 sh '''
-		    python3 -m venv venv
-		    . venv/bin/activate
-		    pip install semgrep
-		    ./venv/bin/semgrep --config=auto --error src/
-		'''
+                    python3 -m venv venv
+                    . venv/bin/activate
+                    pip install --upgrade pip
+                    pip install semgrep
+                    semgrep --config=auto --error src/
+                '''
             }
         }
-        
+
         stage('3. Generate SBOM & SCA Scan') {
             steps {
                 echo "Generating Software Bill of Materials (SBOM) using Syft..."
                 sh 'syft dir:src -o cyclonedx-json > sbom.json'
-                
+
                 echo "Scanning dependencies for Critical/High CVEs using Trivy..."
-                sh 'trivy sbom sbom.json --exit-code 1 --severity CRITICAL,HIGH'
+                sh 'trivy sbom sbom.json --exit-code 1 --severity CRITICAL,HIGH --skip-version-check'
             }
         }
 
@@ -39,48 +44,58 @@ pipeline {
             steps {
                 echo "Scanning Kubernetes and Terraform configurations with Checkov..."
                 sh '''
-		    python3 -m venv checkov-venv
-		    ./checkov-venv/bin/pip install checkov
-		    ./checkov-venv/bin/checkov -d k8s/ -d terraform/
-		'''
+                    python3 -m venv checkov-venv
+                    ./checkov-venv/bin/pip install --upgrade pip
+                    ./checkov-venv/bin/pip install checkov
+                    ./checkov-venv/bin/checkov -d k8s/ -d terraform/
+                '''
             }
         }
-        
+
         stage('5. Build & Container Security Scan') {
             steps {
                 echo "Building Docker image..."
-                sh "docker build -t ${IMAGE_NAME} src/"
-                
-                echo "Scanning container image vulnerabilities..."
-                sh "trivy image --exit-code 1 --severity CRITICAL ${IMAGE_NAME}"
+                sh "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
+
+                echo "Scanning Docker image with Trivy..."
+                sh "trivy image --exit-code 1 --severity CRITICAL,HIGH --skip-version-check ${IMAGE_NAME}:${IMAGE_TAG}"
             }
         }
-        
+
         stage('6. Deploy to Kind Cluster') {
             steps {
+                echo "Loading image into local Kind cluster..."
+                sh "kind load docker-image ${IMAGE_NAME}:${IMAGE_TAG} --name kind"
+
                 echo "Applying Kubernetes manifests..."
-		sh '''
-		    kind export kubeconfig --name kind
-		    kubectl apply --validate=false -f k8s/deployment.yaml
-		    echo "Waiting for secops-app pdo to be ready..."
-		    kubectl rollout status deployment/secops-app -n secops --timeout=60s
-		    pkill -f "kubectl port-forward" || true
-		    kubectl port-forward -n secops svc/secops-app-service 5000:5000 &
-		    sleep 3
-		'''
+                sh '''
+                    kind export kubeconfig --name kind
+                    kubectl apply --validate=false -f k8s/deployment.yaml
+                    
+                    echo "Waiting for secops-app pod to be ready..."
+                    kubectl rollout status deployment/secops-app -n secops --timeout=60s
+                    
+                    # Clean up any stale port-forward and establish a fresh one for DAST
+                    pkill -f "kubectl port-forward" || true
+                    kubectl port-forward -n secops svc/secops-app-service 5000:5000 &
+                    sleep 3
+                '''
             }
         }
-        
+
         stage('7. DAST Scan (OWASP ZAP)') {
             steps {
                 echo "Running OWASP ZAP dynamic baseline scan..."
                 sh '''
-		    docker run --rm -t --network host zaproxy/zap-stable zap-baseline.py -t http://127.0.0.1:5000 || true
-		    pkill -f "kubectl port-forward" || true
-		'''
+                    docker run --rm -t --network host zaproxy/zap-stable zap-baseline.py -t http://127.0.0.1:5000 || true
+                    
+                    # Clean up background port-forward
+                    pkill -f "kubectl port-forward" || true
+                '''
             }
         }
     }
+
     post {
         success {
             echo "SUCCESS: Pipeline passed all security gates and deployed securely!"
