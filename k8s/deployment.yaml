@@ -1,49 +1,25 @@
----
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: secops
-  labels:
-    name: secops
-    pod-security.kubernetes.io/enforce: restricted
-    pod-security.kubernetes.io/audit: restricted
-    pod-security.kubernetes.io/warn: restricted
-
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: secops-app
   namespace: secops
-  annotations:
-    checkov.io/skip1: CKV_K8S_43=Allow image tag for local Kind/Jenkins lab pipeline
-    checkov.io/skip2: CKV_K8S_15=Allow IfNotPresent pull policy for local Kind cluster lab
   labels:
     app: secops-app
-    app.kubernetes.io/name: secops-app
-    app.kubernetes.io/part-of: secupipeline-guard
-    app.kubernetes.io/managed-by: argocd
 spec:
   replicas: 1
   strategy:
-  revisionHistoryLimit: 3
-  strategy:
-    type: RollingUpdate
-    rollingUpdate:
-      maxSurge: 1
-      maxUnavailable: 0
+    type: Recreate
   selector:
     matchLabels:
       app: secops-app
   template:
     metadata:
-      annotations:
-        checkov.io/skip1: CKV_K8S_43=Using image tag for local Kind/Jenkins lab pipeline
       labels:
         app: secops-app
+      annotations:
+        checkov.io/skip1: CKV_K8S_43=Allow image tag for local Kind/Jenkins lab pipeline
+        checkov.io/skip2: CKV_K8S_15=Allow IfNotPresent pull policy for local Kind cluster lab
     spec:
-      automountServiceAccountToken: false
-      enableServiceLinks: false
       securityContext:
         runAsNonRoot: true
         runAsUser: 10001
@@ -53,32 +29,28 @@ spec:
           type: RuntimeDefault
       containers:
         - name: secops-app
-          # checkov:skip=CKV_K8S_43:
           image: secops-app:1.0.0
           imagePullPolicy: IfNotPresent
           ports:
-            - name: http
-              containerPort: 5000
-              protocol: TCP
+            - containerPort: 5000
+              name: http
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+                - ALL
           resources:
-            requests:
-              cpu: "100m"
-              memory: "128Mi"
             limits:
               cpu: "500m"
               memory: "256Mi"
-          securityContext:
-            allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: true
-            runAsNonRoot: true
-            runAsUser: 10001
-            runAsGroup: 10001
-            capabilities:
-              drop: ["ALL"]
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
           livenessProbe:
             httpGet:
               path: /healthz
-              port: http
+              port: 5000
             initialDelaySeconds: 10
             periodSeconds: 10
             timeoutSeconds: 3
@@ -86,7 +58,7 @@ spec:
           readinessProbe:
             httpGet:
               path: /readyz
-              port: http
+              port: 5000
             initialDelaySeconds: 5
             periodSeconds: 5
             timeoutSeconds: 2
@@ -103,7 +75,6 @@ spec:
         - name: cache
           emptyDir:
             sizeLimit: 128Mi
-
 ---
 apiVersion: v1
 kind: Service
@@ -114,14 +85,13 @@ metadata:
     app: secops-app
 spec:
   type: ClusterIP
+  ports:
+    - port: 5000
+      targetPort: 5000
+      protocol: TCP
+      name: http
   selector:
     app: secops-app
-  ports:
-    - name: http
-      port: 5000
-      targetPort: http
-      protocol: TCP
-
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -139,18 +109,9 @@ spec:
     - from:
         - namespaceSelector:
             matchLabels:
-              kubernetes.io/metadata.name: ingress-nginx
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: kube-system
+              kubernetes.io/metadata.name: secops
       ports:
         - protocol: TCP
           port: 5000
   egress:
-    - to:
-        - namespaceSelector: {}
-      ports:
-        - protocol: UDP
-          port: 53
-        - protocol: TCP
-          port: 53
+    - {}
