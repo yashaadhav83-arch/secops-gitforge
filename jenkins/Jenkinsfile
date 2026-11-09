@@ -55,7 +55,7 @@ pipeline {
         stage('5. Build & Container Security Scan') {
             steps {
                 echo "Building Docker image..."
-                sh "docker build -f /home/pgcp-itiss/secops-gitforge/src -t ${IMAGE_NAME}:${IMAGE_TAG} ."
+                sh "docker build -f /home/pgcp-itiss/secops-gitforge/src/Dockerfile -t ${IMAGE_NAME}:${IMAGE_TAG} ."
 
                 echo "Scanning Docker image with Trivy..."
                 sh "trivy image --exit-code 1 --severity CRITICAL,HIGH --skip-version-check ${IMAGE_NAME}:${IMAGE_TAG}"
