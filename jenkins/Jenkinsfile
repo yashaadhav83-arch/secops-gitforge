@@ -54,8 +54,8 @@ pipeline {
 
         stage('5. Build & Container Security Scan') {
             steps {
-                echo "Building Docker image..."
-                sh "docker build  -t ${IMAGE_NAME}:${IMAGE_TAG} ."
+                echo "Building Docker image with context set to src/..."
+                sh "docker build -f src/Dockerfile -t ${IMAGE_NAME}:${IMAGE_TAG} src/"
 
                 echo "Scanning Docker image with Trivy..."
                 sh "trivy image --exit-code 1 --severity CRITICAL,HIGH --skip-version-check ${IMAGE_NAME}:${IMAGE_TAG}"
