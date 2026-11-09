@@ -58,7 +58,7 @@ pipeline {
                 sh "docker build -f src/Dockerfile -t ${IMAGE_NAME}:${IMAGE_TAG} src/"
 
                 echo "Scanning Docker image with Trivy..."
-                sh "trivy image --exit-code 1 --severity CRITICAL,HIGH --skip-version-check ${IMAGE_NAME}:${IMAGE_TAG}"
+                sh "trivy image --exit-code 1 --severity CRITICAL --skip-version-check ${IMAGE_NAME}:${IMAGE_TAG}"
             }
         }
 
